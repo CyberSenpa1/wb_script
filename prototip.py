@@ -1,55 +1,100 @@
-from excel import M
+from excel import M, get_shelf
 import os
 import win32com.client as win32
 import pythoncom
 import time
 
-word = win32.Dispatch('Word.Application')
+# Получаем текущую директорию, где находится скрипт
+script_directory = os.path.dirname(os.path.abspath(__file__))
 
-# список для хранения названий файлов, которые не найдены
+# Строим путь к папке "Артикулы"
+artikuly_folder = os.path.join(script_directory, 'Артикулы')
+
+# Инициализируем Word
+word = win32.gencache.EnsureDispatch('Word.Application')
+
+# Скрываем окно Word
+word.Visible = False
+
+# Отключаем все диалоговые окна
+word.DisplayAlerts = False
+
+# Список для хранения названий файлов, которые не найдены
 not_found = []
 
-# проходим по всем именам файлов в списке L
+# Проходим по всем именам файлов в списке M
 for filename in M:
-    # создаем полный путь к файлу
-    file_path = os.path.join('C:\\Users\\Voro_\\OneDrive\\Desktop\\печать\\Программа\\Артикулы', filename)
+    # Создаем полный путь к файлу
+    file_path = os.path.join(artikuly_folder, filename)
     
-    # проверяем наличие файла
+    # Проверяем наличие файла
     if not os.path.isfile(file_path):
-        # если файл не найден, добавляем его название в список not_found
+        # Если файл не найден, добавляем его название в список not_found
         not_found.append(filename)
         continue
     
-    # открываем файл Word
+    # Открываем файл Word
     try:
         doc = word.Documents.Open(file_path)
     except Exception as e:
-        print('Ошибка пока отрывался файл', e)
+        print('Ошибка при открытии файла', e)
         continue
     
-    # печатаем содержимое файла
+    # Получаем артикул из имени файла
+    articul = filename[:-4]  # Убираем расширение .rtf
+    
+    # Отладочная информация
+    print(f"Обрабатываемый артикул: {articul}")
+    
+    # Получаем стеллаж по артикулу
+    shelf = get_shelf(articul)
+    
+    # Отладочная информация
+    print(f"Найденный стеллаж: {shelf}")
+    
+    # Добавляем информацию о стеллаже в конец документа
     try:
-        doc.PrintOut()
+        # Перемещаем курсор в конец документа
+        end_range = doc.Content
+        end_range.Collapse(Direction=0)  # 0 означает конец документа
+        
+        # Добавляем текст "Стеллаж: <номер стеллажа>"
+        end_range.InsertAfter("\n")
+        end_range.InsertAfter(f"Стеллаж: {shelf}")
+        
+        
+        # Настраиваем шрифт
+        end_range.Font.Size = 5  # 5 размер пунктов
+        end_range.Font.Name = "Times New Roman"  # Укажите нужный шрифт
+        
+        # Выравниваем текст по левому краю
+        end_range.ParagraphFormat.Alignment = 0  # 0 = выравнивание по левому краю
+    except Exception as e:
+        print(f'Ошибка при добавлении информации о стеллаже в файл {filename}: {e}')
+    
+    # Печатаем содержимое файла
+    try:
+        # Печать без диалоговых окон
+        doc.PrintOut(Background=False)
     except Exception as e:
         print(f'Ошибка при печати файла {filename}: {e}')
     
-    # закрываем файл Word
+    # Закрываем файл Word без сохранения изменений
     try:
-        doc.Close()
-
+        doc.Close(win32.constants.wdDoNotSaveChanges)  # Не сохраняем изменения
     except Exception as e:
-        print('Ошибка пока файл закрывался', e)
+        print('Ошибка при закрытии файла', e)
     
     time.sleep(1)
     
 
-# закрываем экземпляр Word.Application
+# Закрываем экземпляр Word.Application
 word.Quit()
 
-# закрываем все объекты COM
+# Закрываем все объекты COM
 pythoncom.CoUninitialize()
 
-# выводим список ненайденных файлов
+# Выводим список ненайденных файлов
 if not_found:
     print('Следующие файлы не найдены:')
     for filename in not_found:
